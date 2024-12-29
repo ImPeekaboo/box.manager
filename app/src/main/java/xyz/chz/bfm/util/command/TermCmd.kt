@@ -91,28 +91,48 @@ object TermCmd {
             return s
         }
 
-    val appidList: HashSet<String>
-        get() {
-            val s = HashSet<String>()
-            val result = execRootCmd("cat ${path}/package.list.ini")
-            if (result.isEmpty()) {
-                return s
-            }
-            val appIds = result.split("\n", " ")
-            for (i in appIds) {
-                if (i.isNotEmpty()) {
-                    s.add(i.trim())
-                }
-            }
+    val appidList: HashSet<String> get() {
+        val s = HashSet<String>()
+        val modeCommand = "sed -n 's/^\\(mode:[^ ]*\\).*/\\1/p' ${path}/package.list.cfg"
+        val packageCommand = "sed -n '/^[^#]/s/^\\([^ ]*\\.[^ ]*\\).*/\\1/p' ${path}/package.list.cfg"
+        val gidCommand = "sed -n '/^[^#]/s/^\\([0-9]\\{1,8\\}\\).*/\\1/p' ${path}/package.list.cfg"
+
+        val modeResult = execRootCmd(modeCommand)
+        val packageResult = execRootCmd(packageCommand)
+        val gidResult = execRootCmd(gidCommand)
+
+        val result = """
+            $modeResult
+            $packageResult
+            $gidResult
+        """.trimIndent()
+        
+        if (result.isEmpty()) {
             return s
         }
+        
+        val appIds = result.split("\n")
+        for (i in appIds) {
+            if (i.isNotEmpty() && !i.startsWith("alook")) {
+                s.add(i.trim())
+            }
+        }
+        return s
+    }
 
     fun setAppidList(s: HashSet<String?>): Boolean {
         val content = s.filterNotNull()
             .filter { it.isNotEmpty() }
             .joinToString(" ")
-        
-        return execRootCmdSilent("echo '${content}' > ${path}/package.list.ini && sed -i 's/ /\\'$'\\n/g' ${path}/package.list.ini") != -1
+
+        val command = """
+            echo "$content" > "$path/package.list.cfg" && 
+            sed -i '/^#/!s/ /\'$'\n/g' "${path}/package.list.cfg"
+            sed -i '/alook\\|999_alook/s/^/#/' "${path}/package.list.cfg"
+        """.trimIndent()
+
+        return execRootCmdSilent(command) != -1
+
     }
 
     private fun getNameConfig(what: String, isClash: Boolean): String {
